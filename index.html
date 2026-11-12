@@ -32,7 +32,7 @@
   body > *:not(#fx) { position:relative; z-index:1; }
   #stage { margin-top:auto; } #done { margin-bottom:auto; } #live { margin-bottom:auto; }
   #fx { position:fixed; inset:0; width:100%; height:100%; z-index:5 !important; pointer-events:none; }
-  body.has-photo #stage { height:min(max(calc(100dvh - var(--s) * 150 - 280px), 30dvh), 110vw); }
+  body.has-photo #stage { height:min(max(calc(100dvh - var(--s) * 150 - 150px), 30dvh), 150vw); }
   button, .step { font:inherit; font-weight:700; border:0; border-radius:999px; padding:10px 22px;
            background:var(--navy); color:#fff; cursor:pointer; }
   button.sec { background:rgba(255,255,255,.9); color:var(--navy); border:2px solid var(--navy); }
@@ -46,6 +46,10 @@
   .arrow { text-align:center; color:var(--blue); font-size:.9rem; line-height:1; padding:3px 0; }
   #msg { color:var(--navy); font-weight:600; font-size:.82rem; text-align:center; max-width:360px; min-height:1.2em; margin:0; }
   [hidden] { display:none !important; }
+  /* simple: un botón grande por pantalla */
+  .big { font-size:1.15rem; font-weight:800; min-height:58px; padding:14px 34px; min-width:min(300px,86vw);
+         box-shadow:0 6px 16px rgba(37,48,107,.28); }
+  #go { background:linear-gradient(135deg,#2f7be0,#2457b8); box-shadow:0 0 0 3px var(--gold), 0 6px 16px rgba(37,48,107,.28); }
 </style>
 </head>
 <body>
@@ -58,19 +62,14 @@
     <img id="result" alt="Tu foto">
   </div>
 
-  <p id="msg">Pulsa «Activar cámara» y acepta el permiso.</p>
+  <p id="msg">Abriendo la cámara…</p>
 
   <div class="row" id="live">
-    <button id="start">Activar cámara</button>
-    <button id="shoot" hidden>Tomar foto</button>
-    <button id="flip" class="sec" hidden>Girar cámara</button>
+    <button id="start" class="big" hidden>📸 Activar cámara</button>
+    <button id="shoot" class="big" hidden>📸 Tomar foto</button>
   </div>
-  <div class="steps" id="done" hidden>
-    <button id="retry" class="step sec"><span class="n">1</span>Repetir si no te gustó</button>
-    <div class="arrow" aria-hidden="true">▼</div>
-    <button id="download" class="step"><span class="n">2</span>Descargar foto</button>
-    <div class="arrow" aria-hidden="true">▼</div>
-    <a id="points" class="step pts" href="https://app.supertize.com/content/764029" target="_blank" rel="noopener"><span class="n">3</span>Sube tu foto y gana 100 puntos</a>
+  <div class="row" id="done" hidden>
+    <button id="go" class="big">¡Listo! Continuar</button>
   </div>
 
 <script>
@@ -103,6 +102,7 @@ async function startCam() {
   } catch (e) {
     try { stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
     catch (e2) {
+      $("start").hidden = false; $("shoot").hidden = true;
       msg.textContent = (e2.name === "NotAllowedError" || e.name === "NotAllowedError")
         ? "La cámara está bloqueada. Toca el candado junto al enlace → Permisos → Cámara → Permitir, y vuelve a pulsar «Activar cámara»."
         : "No se pudo abrir la cámara. Cierra otras apps que la usen y pulsa «Activar cámara».";
@@ -111,8 +111,8 @@ async function startCam() {
   }
   cam.srcObject = stream;
   cam.classList.toggle("mirror", facing === "user");
-  $("start").hidden = true; $("shoot").hidden = false; $("flip").hidden = false;
-  msg.textContent = "Encuadra tu cara y pulsa «Tomar foto».";
+  $("start").hidden = true; $("shoot").hidden = false;
+  msg.textContent = "Sonríe y toca «Tomar foto».";
 }
 
 function shoot() {
@@ -135,31 +135,36 @@ function shoot() {
     result.src = URL.createObjectURL(b);
     result.style.display = "block";
     $("live").hidden = true; $("done").hidden = false;
-    msg.textContent = "¡Listo! Sigue estos pasos:"; document.body.classList.add("has-photo"); burst(innerWidth/2, innerHeight/2, 120);
+    msg.textContent = "¡Quedaste genial! Toca «¡Listo! Continuar»."; document.body.classList.add("has-photo"); burst(innerWidth/2, innerHeight/2, 120);
     stream.getTracks().forEach(t => t.stop());
   }, "image/jpeg", 0.93);
 }
 
 const filename = () => "renata-la-felicidad-incluye.jpg";
 
-function download() {
+const RETURN_URL = (() => { const v = new URLSearchParams(location.search).get("volver");
+  return v && /^https:\/\//.test(v) ? v : "https://app.supertize.com/content/764029"; })();
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+let saved = false;
+function downloadFile() {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = filename();
   document.body.appendChild(a); a.click(); a.remove();
-  msg.textContent = "¡Foto descargada! Si no la ves, mantén presionada la imagen y elige «Guardar imagen». Después, súbela para ganar tus puntos.";
 }
-
-function retry() {
-  result.style.display = "none"; document.body.classList.remove("has-photo");
-  $("done").hidden = true; $("live").hidden = false;
-  startCam();
+function goOn() { msg.textContent = "Continuando…"; try { location.href = RETURN_URL; } catch (e) {} }
+function onGo() {
+  if (!blob) return;
+  if (saved) { goOn(); return; }
+  saved = true; downloadFile();
+  $("go").textContent = "Continuar";
+  if (IS_IOS) msg.textContent = "En el aviso del iPhone toca «Descargar» y luego «Continuar».";
+  else { msg.textContent = "¡Guardada! ✓ Continuando…"; setTimeout(goOn, 1500); }
 }
 
 $("start").onclick = startCam;
 $("shoot").onclick = shoot;
-$("flip").onclick = () => { facing = facing === "user" ? "environment" : "user"; startCam(); };
-$("download").onclick = download;
-$("retry").onclick = retry;
+$("go").onclick = onGo;
+startCam();                                       // la cámara frontal se abre sola al entrar
 
 /* ---------- Papelillos de celebración ---------- */
 const fx = $("fx"), fg = fx.getContext("2d");
